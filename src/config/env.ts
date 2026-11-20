@@ -9,6 +9,17 @@ const envSchema = z.object({
   PORT: z.coerce.number().int().positive().default(5000),
   MONGO_URI: z.string().min(1, "MONGO_URI দিতে হবে"),
   CLIENT_ORIGIN: z.string().min(1).default("http://localhost:3000"),
+
+  // Login টিকিট সই করার গোপন চাবি। কমপক্ষে ৩২ অক্ষর।
+  JWT_SECRET: z.string().min(32, "JWT_SECRET কমপক্ষে ৩২ অক্ষরের হতে হবে"),
+
+  // Cookie একই site-এর (যেমন *.bizvely.com) জন্য "lax" ঠিক আছে
+  COOKIE_SAMESITE: z.enum(["lax", "strict", "none"]).default("lax"),
+
+  // প্রথমবার admin তৈরির জন্য (দুটোই না দিলে admin তৈরি হবে না)
+  ADMIN_NAME: z.string().trim().min(1).max(80).default("Admin"),
+  ADMIN_EMAIL: z.string().trim().toLowerCase().email().optional(),
+  ADMIN_PASSWORD: z.string().min(12, "ADMIN_PASSWORD কমপক্ষে ১২ অক্ষরের হতে হবে").optional(),
 });
 
 const parsed = envSchema.safeParse(process.env);
