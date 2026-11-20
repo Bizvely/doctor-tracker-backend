@@ -2,10 +2,12 @@ import mongoose from "mongoose";
 import { app } from "./app";
 import { connectDB } from "./config/db";
 import { env } from "./config/env";
+import { seedAdmin } from "./utils/seedAdmin";
 
 async function start(): Promise<void> {
   try {
     await connectDB();
+    await seedAdmin();
 
     // 0.0.0.0 এবং Render-এর দেওয়া PORT-এ শুনতে হয়, নইলে "Port scan timeout" আসে
     const server = app.listen(env.PORT, "0.0.0.0", () => {
