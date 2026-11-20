@@ -1,4 +1,6 @@
+import { Types } from "mongoose";
 import { Doctor } from "../models/Doctor";
+import { Patient } from "../models/Patient";
 import type { DoctorInput, ListDoctorsQuery } from "../validators/doctor.validator";
 import { ApiError } from "../utils/ApiError";
 import { asyncHandler } from "../utils/asyncHandler";
@@ -10,7 +12,7 @@ const SORT_OPTIONS = {
   name: { name: 1, _id: 1 },
 } as const;
 
-// Doctor-এর তালিকা: search + filter + sort + pagination
+// Doctor-এর তালিকা: search + filter + sort + pagination + প্রতি ডাক্তারের রোগী সংখ্যা
 export const listDoctors = asyncHandler(async (_req, res) => {
   const { search, specialization, hospital, from, to, sort, page, limit } =
     res.locals.query as ListDoctorsQuery;
@@ -39,9 +41,24 @@ export const listDoctors = asyncHandler(async (_req, res) => {
     Doctor.countDocuments(filter),
   ]);
 
+  // এই পাতার সব ডাক্তারের রোগী সংখ্যা মাত্র ১টা aggregation query-তে (প্রতি ডাক্তারের জন্য আলাদা নয়)
+  const counts =
+    doctors.length > 0
+      ? await Patient.aggregate<{ _id: Types.ObjectId; count: number }>([
+          { $match: { doctor: { $in: doctors.map((doctor) => doctor._id) } } },
+          { $group: { _id: "$doctor", count: { $sum: 1 } } },
+        ])
+      : [];
+  const countMap = new Map(counts.map((item) => [String(item._id), item.count]));
+
+  const data = doctors.map((doctor) => ({
+    ...doctor,
+    patientCount: countMap.get(String(doctor._id)) ?? 0,
+  }));
+
   res.json({
     success: true,
-    data: doctors,
+    data,
     pagination: { page, limit, total, totalPages: Math.max(1, Math.ceil(total / limit)) },
   });
 });
@@ -82,4 +99,18 @@ export const updateDoctor = asyncHandler(async (req, res) => {
   }).lean();
   if (!doctor) throw new ApiError(404, "Doctor not found");
   res.json({ success: true, data: doctor });
+});
+
+// ডাক্তার মুছা: রোগী থাকলে মুছতে দেওয়া হয় না (রোগী "এতিম" হয়ে যাওয়া ঠেকাতে)
+export const deleteDoctor = asyncHandler(async (req, res) => {
+  assertObjectId(req.params.id);
+
+  const hasPatients = await Patient.exists({ doctor: new Types.ObjectId(req.params.id) });
+  if (hasPatients) {
+    throw new ApiError(409, "This doctor still has patients. Remove or reassign the patients first.");
+  }
+
+  const deleted = await Doctor.findByIdAndDelete(req.params.id).lean();
+  if (!deleted) throw new ApiError(404, "Doctor not found");
+  res.json({ success: true, message: "Doctor deleted" });
 });
