@@ -6,6 +6,8 @@ import helmet from "helmet";
 import mongoose from "mongoose";
 import { env } from "./config/env";
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler";
+import { requireAllowedOrigin } from "./middleware/originCheck";
+import authRoutes from "./routes/auth.routes";
 import { ApiError } from "./utils/ApiError";
 
 export const app = express();
@@ -63,7 +65,12 @@ app.get("/", (_req, res) => {
   res.json({ success: true, message: "Doctor Tracker API" });
 });
 
-// পরের ধাপে এখানে auth, doctors, patients route যোগ হবে
+// ডাটা বদলানো সব API-তে origin যাচাই (CSRF প্রতিরক্ষা)
+app.use("/api", requireAllowedOrigin);
+
+app.use("/api/auth", authRoutes);
+
+// পরের ধাপে এখানে doctors, patients route যোগ হবে
 
 app.use(notFoundHandler);
 app.use(errorHandler);
