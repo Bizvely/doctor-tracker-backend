@@ -8,6 +8,7 @@ import { env } from "./config/env";
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler";
 import { requireAllowedOrigin } from "./middleware/originCheck";
 import authRoutes from "./routes/auth.routes";
+import dashboardRoutes from "./routes/dashboard.routes";
 import doctorRoutes from "./routes/doctor.routes";
 import patientRoutes from "./routes/patient.routes";
 import { ApiError } from "./utils/ApiError";
@@ -73,8 +74,7 @@ app.use("/api", requireAllowedOrigin);
 app.use("/api/auth", authRoutes);
 app.use("/api/doctors", doctorRoutes);
 app.use("/api/patients", patientRoutes);
-
-// পরের ধাপে এখানে dashboard route যোগ হবে
+app.use("/api/dashboard", dashboardRoutes);
 
 app.use(notFoundHandler);
 app.use(errorHandler);
