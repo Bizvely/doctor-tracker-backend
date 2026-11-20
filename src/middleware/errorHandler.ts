@@ -18,10 +18,29 @@ export function errorHandler(
     return;
   }
 
+  const details = err as {
+    name?: string;
+    code?: number;
+    status?: number;
+    keyPattern?: Record<string, unknown>;
+  } | null;
+
+  // একই মান দুইবার (যেমন একই email): MongoDB-র duplicate error
+  if (details?.code === 11000) {
+    const field = details.keyPattern ? Object.keys(details.keyPattern)[0] : "value";
+    res.status(409).json({ success: false, message: `${field} already exists` });
+    return;
+  }
+
+  // Database-এর যাচাইয়ে ভুল data
+  if (details?.name === "ValidationError" || details?.name === "CastError") {
+    res.status(400).json({ success: false, message: "Invalid data" });
+    return;
+  }
+
   // ভুল JSON পাঠালে বা body বেশি বড় হলে Express নিজে 4xx status দেয়
-  const status = (err as { status?: number } | null)?.status;
-  if (typeof status === "number" && status >= 400 && status < 500) {
-    res.status(status).json({ success: false, message: "Invalid request" });
+  if (typeof details?.status === "number" && details.status >= 400 && details.status < 500) {
+    res.status(details.status).json({ success: false, message: "Invalid request" });
     return;
   }
 
