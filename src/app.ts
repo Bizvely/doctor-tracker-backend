@@ -9,6 +9,7 @@ import { errorHandler, notFoundHandler } from "./middleware/errorHandler";
 import { requireAllowedOrigin } from "./middleware/originCheck";
 import authRoutes from "./routes/auth.routes";
 import doctorRoutes from "./routes/doctor.routes";
+import patientRoutes from "./routes/patient.routes";
 import { ApiError } from "./utils/ApiError";
 
 export const app = express();
@@ -71,8 +72,9 @@ app.use("/api", requireAllowedOrigin);
 
 app.use("/api/auth", authRoutes);
 app.use("/api/doctors", doctorRoutes);
+app.use("/api/patients", patientRoutes);
 
-// পরের ধাপে এখানে patients ও dashboard route যোগ হবে
+// পরের ধাপে এখানে dashboard route যোগ হবে
 
 app.use(notFoundHandler);
 app.use(errorHandler);
