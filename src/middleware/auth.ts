@@ -1,7 +1,7 @@
 import { User } from "../models/User";
 import { ApiError } from "../utils/ApiError";
 import { asyncHandler } from "../utils/asyncHandler";
-import { AUTH_COOKIE_NAME, verifyAuthToken } from "../utils/jwt";
+import { AUTH_COOKIE_NAME, verifyAuthToken, type VerifiedAuthPayload } from "../utils/jwt";
 
 // যে route-এ এটা বসবে, সেখানে login ছাড়া ঢোকা যাবে না
 export const requireAuth = asyncHandler(async (req, _res, next) => {
@@ -10,16 +10,21 @@ export const requireAuth = asyncHandler(async (req, _res, next) => {
     throw new ApiError(401, "Authentication required");
   }
 
-  let userId: string;
+  let payload: VerifiedAuthPayload;
   try {
-    userId = verifyAuthToken(token).userId;
+    payload = verifyAuthToken(token);
   } catch {
     throw new ApiError(401, "Invalid or expired session");
   }
 
   // প্রতিবার database-এ দেখা হয় ইউজার এখনো আছে কিনা
-  const user = await User.findById(userId).select("name email");
+  const user = await User.findById(payload.userId).select("name email passwordChangedAt");
   if (!user) {
+    throw new ApiError(401, "Invalid or expired session");
+  }
+
+  // password বদলানোর আগে তৈরি হওয়া পুরোনো টিকিট বাতিল (সেকেন্ডে তুলনা)
+  if (user.passwordChangedAt && payload.issuedAt < Math.floor(user.passwordChangedAt.getTime() / 1000)) {
     throw new ApiError(401, "Invalid or expired session");
   }
 
