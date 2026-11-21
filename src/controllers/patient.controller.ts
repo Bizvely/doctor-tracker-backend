@@ -9,7 +9,8 @@ import type {
 } from "../validators/patient.validator";
 import { ApiError } from "../utils/ApiError";
 import { asyncHandler } from "../utils/asyncHandler";
-import { assertObjectId, dhakaDateRange, escapeRegex } from "../utils/queryHelpers";
+import { assertObjectId, dhakaDateRange } from "../utils/queryHelpers";
+import { buildPatientSearchTokens, buildSearchConditions } from "../utils/searchTokens";
 
 const SORT_OPTIONS = {
   newest: { visitDate: -1, _id: -1 },
@@ -30,10 +31,9 @@ function buildPatientFilter(query: PatientFilterInput): Record<string, unknown> 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const filter: Record<string, any> = {};
 
-  if (query.search) {
-    const pattern = new RegExp(escapeRegex(query.search), "i");
-    filter.$or = [{ name: pattern }, { phone: pattern }];
-  }
+  // Search: প্রতিটা শব্দ নাম/ফোনের কোনো শব্দের শুরুর সাথে মিলতে হবে (index ব্যবহার করে)
+  const searchConditions = buildSearchConditions(query.search);
+  if (searchConditions.length > 0) filter.$and = searchConditions;
   if (query.condition) filter.condition = query.condition;
   if (query.doctorId) filter.doctor = new Types.ObjectId(query.doctorId);
 
@@ -117,8 +117,14 @@ export const getPatient = asyncHandler(async (req, res) => {
 export const createPatient = asyncHandler(async (req, res) => {
   const { doctorId, ...fields } = req.body as PatientInput;
   await assertDoctorExists(doctorId);
-  const patient = await Patient.create({ ...fields, doctor: new Types.ObjectId(doctorId) });
-  res.status(201).json({ success: true, data: patient });
+  const patient = await Patient.create({
+    ...fields,
+    doctor: new Types.ObjectId(doctorId),
+    searchTokens: buildPatientSearchTokens(fields),
+  });
+  // searchTokens শুধু ভেতরের কাজে লাগে, উত্তরে পাঠানো হয় না
+  const { searchTokens: _searchTokens, ...data } = patient.toObject();
+  res.status(201).json({ success: true, data });
 });
 
 export const updatePatient = asyncHandler(async (req, res) => {
@@ -128,6 +134,8 @@ export const updatePatient = asyncHandler(async (req, res) => {
 
   const { set, unset } = splitOptionalFields(fields);
   set.doctor = new Types.ObjectId(doctorId);
+  // নাম/ফোন বদলালে search-তালিকাও নতুন করে বানাতে হয়
+  set.searchTokens = buildPatientSearchTokens(fields);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const update: Record<string, any> = { $set: set };
@@ -163,11 +171,15 @@ export const listDoctorPatients = asyncHandler(async (req, res) => {
 
 export const createDoctorPatient = asyncHandler(async (req, res) => {
   await assertDoctorExists(req.params.id);
+  const fields = req.body as PatientFields;
   const patient = await Patient.create({
-    ...(req.body as PatientFields),
+    ...fields,
     doctor: new Types.ObjectId(req.params.id),
+    searchTokens: buildPatientSearchTokens(fields),
   });
-  res.status(201).json({ success: true, data: patient });
+  // searchTokens শুধু ভেতরের কাজে লাগে, উত্তরে পাঠানো হয় না
+  const { searchTokens: _searchTokens, ...data } = patient.toObject();
+  res.status(201).json({ success: true, data });
 });
 
 // শুধু ওই ডাক্তারের রোগীই মুছবে (অন্য ডাক্তারের রোগীর id দিলে 404)
