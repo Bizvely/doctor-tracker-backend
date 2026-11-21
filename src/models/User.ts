@@ -7,6 +7,8 @@ const userSchema = new Schema(
     // select: false মানে সাধারণ query-তে password hash কখনো আসবে না
     passwordHash: { type: String, required: true, select: false },
     role: { type: String, enum: ["admin"], default: "admin" },
+    // password শেষবার কখন বদলেছে। এর আগে তৈরি হওয়া login টিকিট আর চলবে না।
+    passwordChangedAt: { type: Date },
   },
   { timestamps: true }
 );
