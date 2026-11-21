@@ -20,6 +20,11 @@ const envSchema = z.object({
   ADMIN_NAME: z.string().trim().min(1).max(80).default("Admin"),
   ADMIN_EMAIL: z.string().trim().toLowerCase().email().optional(),
   ADMIN_PASSWORD: z.string().min(12, "ADMIN_PASSWORD কমপক্ষে ১২ অক্ষরের হতে হবে").optional(),
+
+  // Interviewer-দের জন্য আলাদা demo account (দুটোই না দিলে তৈরি হবে না)
+  // এই account-এর password বদলানো যায় না, তাই কেউ আপনাকে আটকে দিতে পারবে না
+  DEMO_USER_EMAIL: z.string().trim().toLowerCase().email().optional(),
+  DEMO_USER_PASSWORD: z.string().min(12, "DEMO_USER_PASSWORD কমপক্ষে ১২ অক্ষরের হতে হবে").optional(),
 });
 
 const parsed = envSchema.safeParse(process.env);
