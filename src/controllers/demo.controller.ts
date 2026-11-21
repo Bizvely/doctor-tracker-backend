@@ -2,6 +2,7 @@ import { Doctor } from "../models/Doctor";
 import { PATIENT_CONDITIONS, Patient } from "../models/Patient";
 import { ApiError } from "../utils/ApiError";
 import { asyncHandler } from "../utils/asyncHandler";
+import { buildDoctorSearchTokens } from "../utils/searchTokens";
 
 type Condition = (typeof PATIENT_CONDITIONS)[number];
 
@@ -90,6 +91,7 @@ export const loadDemoData = asyncHandler(async (_req, res) => {
       hospital,
       phone,
       email,
+      searchTokens: buildDoctorSearchTokens({ name, specialization, hospital, email }),
     }))
   );
 
