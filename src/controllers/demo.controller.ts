@@ -19,7 +19,7 @@ interface DemoDoctor {
 }
 
 // আন্তর্জাতিক নামের demo ডাক্তার (email-এ example.com: এটা সংরক্ষিত ডোমেইন, সত্যিকারের কারো নয়)
-const DEMO_DOCTORS: DemoDoctor[] = [
+export const DEMO_DOCTORS: DemoDoctor[] = [
   { name: "Dr. Sarah Johnson", specialization: "Cardiology", hospital: "City General Hospital", phone: "+15550102001", email: "sarah.johnson@example.com", weight: 10, conditions: ["Hypertension", "Heart Disease"] },
   { name: "Dr. Rahul Mehta", specialization: "Endocrinology", hospital: "Riverside Medical Center", phone: "+15550102002", email: "rahul.mehta@example.com", weight: 9, conditions: ["Diabetes"] },
   { name: "Dr. Amira Hassan", specialization: "Pulmonology", hospital: "City General Hospital", phone: "+15550102003", email: "amira.hassan@example.com", weight: 7, conditions: ["Asthma", "Infection"] },
@@ -142,4 +142,72 @@ export const loadDemoData = asyncHandler(async (_req, res) => {
     await Doctor.deleteMany({ _id: { $in: doctors.map((doctor) => doctor._id) } });
     throw error;
   }
+});
+
+// ---------- Demo data on/off (Settings পাতার জন্য) ----------
+
+// demo ডাক্তারদের email তালিকা (এই email-গুলো দিয়েই demo ডাক্তার চেনা যায়)
+const DEMO_EMAILS = DEMO_DOCTORS.map((doctor) => doctor.email);
+// demo রোগীর phone সবসময় +1555010 দিয়ে শুরু, মোট ১১ অঙ্ক (আসল রোগীদের সাথে গুলিয়ে না যাওয়ার জন্য)
+const DEMO_PATIENT_PHONE = /^\+1555010\d{4}$/;
+
+// এখন demo data আছে কিনা, আর নতুন করে লোড করা যাবে কিনা
+export const getDemoStatus = asyncHandler(async (_req, res) => {
+  const demoDoctors = await Doctor.find({ email: { $in: DEMO_EMAILS } })
+    .select("_id")
+    .lean();
+  const demoDoctorIds = demoDoctors.map((doctor) => doctor._id);
+
+  const [demoPatients, totalDoctors, totalPatients] = await Promise.all([
+    demoDoctorIds.length > 0
+      ? Patient.countDocuments({ doctor: { $in: demoDoctorIds }, phone: DEMO_PATIENT_PHONE })
+      : 0,
+    Doctor.estimatedDocumentCount(),
+    Patient.estimatedDocumentCount(),
+  ]);
+
+  res.json({
+    success: true,
+    data: {
+      loaded: demoDoctors.length > 0,
+      demoDoctors: demoDoctors.length,
+      demoPatients,
+      // নতুন করে লোড করা যায় শুধু database সম্পূর্ণ ফাঁকা থাকলে
+      canLoad: totalDoctors === 0 && totalPatients === 0,
+    },
+  });
+});
+
+// শুধু demo ডাক্তার ও demo রোগী মোছা। আপনার নিজের যোগ করা ডাক্তার/রোগীতে হাত পড়ে না।
+export const removeDemoData = asyncHandler(async (_req, res) => {
+  const demoDoctors = await Doctor.find({ email: { $in: DEMO_EMAILS } })
+    .select("_id")
+    .lean();
+  if (demoDoctors.length === 0) {
+    throw new ApiError(409, "No demo data found to remove.");
+  }
+  const demoDoctorIds = demoDoctors.map((doctor) => doctor._id);
+
+  // আগে demo রোগী মোছা (phone মিললে তবেই)
+  const patientResult = await Patient.deleteMany({
+    doctor: { $in: demoDoctorIds },
+    phone: DEMO_PATIENT_PHONE,
+  });
+
+  // যে demo ডাক্তারের নিজের যোগ করা আসল রোগী রয়ে গেছে, সেই ডাক্তারকে মোছা হয় না (রোগী এতিম হতো)
+  const keptDoctorIds = await Patient.distinct("doctor", { doctor: { $in: demoDoctorIds } });
+  const keptSet = new Set(keptDoctorIds.map((id) => String(id)));
+  const removableIds = demoDoctorIds.filter((id) => !keptSet.has(String(id)));
+
+  const doctorResult = await Doctor.deleteMany({ _id: { $in: removableIds } });
+
+  res.json({
+    success: true,
+    message: "Demo data removed",
+    data: {
+      doctors: doctorResult.deletedCount,
+      patients: patientResult.deletedCount,
+      keptDoctors: demoDoctorIds.length - removableIds.length,
+    },
+  });
 });
