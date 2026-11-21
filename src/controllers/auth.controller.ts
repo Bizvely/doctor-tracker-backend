@@ -1,6 +1,6 @@
 import bcrypt from "bcryptjs";
 import { User } from "../models/User";
-import type { LoginInput } from "../validators/auth.validator";
+import type { ChangePasswordInput, LoginInput } from "../validators/auth.validator";
 import { ApiError } from "../utils/ApiError";
 import { asyncHandler } from "../utils/asyncHandler";
 import { AUTH_COOKIE_NAME, authCookieOptions, signAuthToken } from "../utils/jwt";
@@ -37,4 +37,34 @@ export const logout = asyncHandler(async (_req, res) => {
 
 export const me = asyncHandler(async (req, res) => {
   res.json({ success: true, user: req.user });
+});
+
+// Password বদল: আগের password ঠিক হলে তবেই নতুনটা বসে
+export const changePassword = asyncHandler(async (req, res) => {
+  const { currentPassword, newPassword } = req.body as ChangePasswordInput;
+
+  if (!req.user) {
+    throw new ApiError(401, "Authentication required");
+  }
+
+  const user = await User.findById(req.user.id).select("+passwordHash");
+  if (!user) {
+    throw new ApiError(401, "Invalid or expired session");
+  }
+
+  const isMatch = await bcrypt.compare(currentPassword, user.passwordHash);
+  if (!isMatch) {
+    // 401 নয়, 400: নইলে frontend ভাববে session শেষ আর নিজে logout করে দেবে
+    throw new ApiError(400, "Current password is incorrect");
+  }
+
+  user.passwordHash = await bcrypt.hash(newPassword, 12);
+  user.passwordChangedAt = new Date();
+  await user.save();
+
+  // এই ব্রাউজারের জন্য নতুন টিকিট দেওয়া হয়, তাই আপনি logout হবেন না। অন্য সব জায়গার পুরোনো টিকিট বাতিল।
+  const token = signAuthToken({ userId: user.id, role: "admin" });
+  res.cookie(AUTH_COOKIE_NAME, token, authCookieOptions());
+
+  res.json({ success: true, message: "Password changed" });
 });
