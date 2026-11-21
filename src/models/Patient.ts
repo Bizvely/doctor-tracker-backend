@@ -29,6 +29,8 @@ const patientSchema = new Schema(
     visitDate: { type: Date, required: true },
     // কোন ডাক্তারের রোগী (Doctor collection-এর সাথে সংযোগ)
     doctor: { type: Schema.Types.ObjectId, ref: "Doctor", required: true },
+    // খোঁজার শব্দ-তালিকা (শুধু search দ্রুত করতে; select: false মানে API-র উত্তরে আসে না)
+    searchTokens: { type: [String], select: false },
   },
   { timestamps: true, versionKey: false }
 );
@@ -39,5 +41,7 @@ patientSchema.index({ doctor: 1, visitDate: -1 });
 patientSchema.index({ condition: 1, visitDate: -1 });
 patientSchema.index({ visitDate: -1 });
 patientSchema.index({ name: 1 });
+// Search-এর index: শব্দের শুরু দিয়ে খুঁজলে database পুরো তালিকা না ঘেঁটে সরাসরি পায়
+patientSchema.index({ searchTokens: 1 });
 
 export const Patient = model("Patient", patientSchema);
