@@ -1,14 +1,27 @@
 import { Types } from "mongoose";
 import { Doctor } from "../models/Doctor";
 import { Patient } from "../models/Patient";
+import { ApiError } from "../utils/ApiError";
 import { asyncHandler } from "../utils/asyncHandler";
 
 // "আজ" কোনটা, তা এই সময় অঞ্চল অনুযায়ী ধরা হয়
 const TIMEZONE = "Asia/Dhaka";
-// chart-এ কত দিন দেখানো হবে
-const DAYS = 30;
+// কত দিনের হিসাব দেখানো যাবে (শুধু এই তিনটা মান চলবে)
+const ALLOWED_RANGES = [7, 30, 90] as const;
+type RangeDays = (typeof ALLOWED_RANGES)[number];
+const DEFAULT_RANGE: RangeDays = 30;
 // "ডাক্তার-প্রতি রোগী" chart-এ সর্বোচ্চ কতজন
 const TOP_DOCTORS = 10;
+
+// ?range=7|30|90 যাচাই করা। ভুল মান এলে 400 error দেওয়া হয়।
+function parseRange(value: unknown): RangeDays {
+  if (value === undefined) return DEFAULT_RANGE;
+  if (typeof value !== "string") throw new ApiError(400, "range must be 7, 30 or 90");
+  const parsed = Number(value);
+  const match = ALLOWED_RANGES.find((item) => item === parsed);
+  if (match === undefined) throw new ApiError(400, "range must be 7, 30 or 90");
+  return match;
+}
 
 // নির্দিষ্ট সময় অঞ্চলে আজকের তারিখ "YYYY-MM-DD" আকারে (en-CA এই আকারই দেয়)
 function todayInTimezone(): string {
@@ -27,11 +40,16 @@ function addDays(isoDate: string, days: number): string {
   return date.toISOString().slice(0, 10);
 }
 
-export const getDashboardStats = asyncHandler(async (_req, res) => {
+export const getDashboardStats = asyncHandler(async (req, res) => {
+  const range = parseRange(req.query.range);
   const today = todayInTimezone();
-  // গত ৩০ দিনের তারিখের তালিকা (পুরোনো থেকে নতুন, শেষটা আজ)
-  const dates = Array.from({ length: DAYS }, (_, index) => addDays(today, index - (DAYS - 1)));
-  const rangeStart = new Date(`${dates[0]}T00:00:00.000Z`);
+
+  // বর্তমান সময় + তার আগের সমান দৈর্ঘ্যের সময়, মোট 2×range দিনের তারিখ (পুরোনো থেকে নতুন, শেষটা আজ)
+  const allDates = Array.from({ length: range * 2 }, (_, index) => addDays(today, index - (range * 2 - 1)));
+  const previousDates = allDates.slice(0, range);
+  const currentDates = allDates.slice(range);
+
+  const rangeStart = new Date(`${allDates[0]}T00:00:00.000Z`);
   const rangeEnd = new Date(`${today}T00:00:00.000Z`);
 
   // ৫টা query একসাথে চলে (একটার জন্য আরেকটার অপেক্ষা নেই)
@@ -63,7 +81,7 @@ export const getDashboardStats = asyncHandler(async (_req, res) => {
       },
     ]),
 
-    // প্রতিদিন কয়জন রোগী (শুধু গত ৩০ দিনের, visitDate index ব্যবহার করে)
+    // প্রতিদিন কয়জন রোগী (বর্তমান + আগের সময় একই query-তে, visitDate index ব্যবহার করে)
     Patient.aggregate<{ _id: string; count: number }>([
       { $match: { visitDate: { $gte: rangeStart, $lte: rangeEnd } } },
       {
@@ -83,20 +101,23 @@ export const getDashboardStats = asyncHandler(async (_req, res) => {
 
   // যেসব দিনে রোগী নেই সেগুলোতে ০ বসানো, যাতে chart-এ ফাঁক না থাকে
   const dayMap = new Map(perDay.map((item) => [item._id, item.count]));
-  const patientsByDay = dates.map((date) => ({ date, count: dayMap.get(date) ?? 0 }));
+  const countOf = (date: string): number => dayMap.get(date) ?? 0;
+  const sumOf = (dates: string[]): number => dates.reduce((sum, date) => sum + countOf(date), 0);
+  // এক দশমিক পর্যন্ত গড়
+  const averageOf = (dates: string[]): number => Math.round((sumOf(dates) / dates.length) * 10) / 10;
 
-  // শেষ n দিনের যোগফল (বাড়তি query ছাড়াই)
-  const sumLast = (days: number): number =>
-    patientsByDay.slice(-days).reduce((sum, item) => sum + item.count, 0);
+  const patientsByDay = currentDates.map((date) => ({ date, count: countOf(date) }));
 
   res.json({
     success: true,
     data: {
+      range,
       totals: { doctors: totalDoctors, patients: totalPatients },
+      // প্রতিটির "current" বর্তমান মান আর "previous" তুলনার মান
       visits: {
-        today: sumLast(1),
-        last7Days: sumLast(7),
-        last30Days: sumLast(30),
+        today: { current: countOf(today), previous: countOf(addDays(today, -1)) },
+        period: { current: sumOf(currentDates), previous: sumOf(previousDates) },
+        averagePerDay: { current: averageOf(currentDates), previous: averageOf(previousDates) },
       },
       patientsPerDoctor: perDoctor,
       patientsByDay,
