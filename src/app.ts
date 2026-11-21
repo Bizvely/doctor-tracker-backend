@@ -68,6 +68,12 @@ app.get("/", (_req, res) => {
   res.json({ success: true, message: "Doctor Tracker API" });
 });
 
+// রোগী ও ডাক্তারের তথ্য browser বা মাঝের কোনো cache-এ জমা হতে দেওয়া হয় না (no-store)
+app.use("/api", (_req, res, next) => {
+  res.setHeader("Cache-Control", "no-store");
+  next();
+});
+
 // ডাটা বদলানো সব API-তে origin যাচাই (CSRF প্রতিরক্ষা)
 app.use("/api", requireAllowedOrigin);
 
