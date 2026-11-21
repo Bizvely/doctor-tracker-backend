@@ -10,18 +10,28 @@ export interface AuthPayload {
   role: "admin";
 }
 
+// যাচাই করার পর পাওয়া তথ্য: সাথে টিকিট কখন তৈরি হয়েছিল (সেকেন্ডে)
+export interface VerifiedAuthPayload extends AuthPayload {
+  issuedAt: number;
+}
+
 // টিকিট (token) তৈরি: ১ দিন বৈধ
 export function signAuthToken(payload: AuthPayload): string {
   return jwt.sign(payload, env.JWT_SECRET, { expiresIn: "1d", algorithm: "HS256" });
 }
 
 // টিকিট যাচাই: ভুল বা মেয়াদোত্তীর্ণ হলে error ছোড়ে
-export function verifyAuthToken(token: string): AuthPayload {
+export function verifyAuthToken(token: string): VerifiedAuthPayload {
   const decoded = jwt.verify(token, env.JWT_SECRET, { algorithms: ["HS256"] });
-  if (typeof decoded === "string" || typeof decoded.userId !== "string" || decoded.role !== "admin") {
+  if (
+    typeof decoded === "string" ||
+    typeof decoded.userId !== "string" ||
+    decoded.role !== "admin" ||
+    typeof decoded.iat !== "number"
+  ) {
     throw new Error("Invalid token payload");
   }
-  return { userId: decoded.userId, role: "admin" };
+  return { userId: decoded.userId, role: "admin", issuedAt: decoded.iat };
 }
 
 // Cookie-র নিরাপত্তা সেটিং: JavaScript পড়তে পারবে না, production-এ শুধু HTTPS
