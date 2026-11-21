@@ -2,7 +2,7 @@ import { Doctor } from "../models/Doctor";
 import { PATIENT_CONDITIONS, Patient } from "../models/Patient";
 import { ApiError } from "../utils/ApiError";
 import { asyncHandler } from "../utils/asyncHandler";
-import { buildDoctorSearchTokens } from "../utils/searchTokens";
+import { buildDoctorSearchTokens, buildPatientSearchTokens } from "../utils/searchTokens";
 
 type Condition = (typeof PATIENT_CONDITIONS)[number];
 
@@ -114,15 +114,19 @@ export const loadDemoData = asyncHandler(async (_req, res) => {
       // সাম্প্রতিক দিনে বেশি visit (০ থেকে ২৯ দিন আগে)
       const daysAgo = Math.floor(Math.pow(random(), 1.3) * 30);
 
+      const name = `${FIRST_NAMES[index % FIRST_NAMES.length]} ${LAST_NAMES[(index * 7 + 3) % LAST_NAMES.length]}`;
+      const phone = `+1555010${String(3000 + index)}`;
+
       return {
-        name: `${FIRST_NAMES[index % FIRST_NAMES.length]} ${LAST_NAMES[(index * 7 + 3) % LAST_NAMES.length]}`,
+        name,
         age: 3 + Math.floor(random() * 83),
         gender,
-        phone: `+1555010${String(3000 + index)}`,
+        phone,
         condition,
         notes: random() < 0.5 ? NOTES[Math.floor(random() * NOTES.length)] : undefined,
         visitDate: new Date(todayMidnight - daysAgo * DAY_MS),
         doctor: doctors[doctorIndex]._id,
+        searchTokens: buildPatientSearchTokens({ name, phone }),
       };
     });
 
