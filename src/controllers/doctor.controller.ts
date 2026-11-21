@@ -4,7 +4,8 @@ import { Patient } from "../models/Patient";
 import type { DoctorInput, ListDoctorsQuery } from "../validators/doctor.validator";
 import { ApiError } from "../utils/ApiError";
 import { asyncHandler } from "../utils/asyncHandler";
-import { assertObjectId, dhakaDateRange, escapeRegex } from "../utils/queryHelpers";
+import { assertObjectId, dhakaDateRange } from "../utils/queryHelpers";
+import { buildDoctorSearchTokens, buildSearchConditions } from "../utils/searchTokens";
 
 const SORT_OPTIONS = {
   newest: { createdAt: -1, _id: -1 },
@@ -21,10 +22,9 @@ export const listDoctors = asyncHandler(async (_req, res) => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const filter: Record<string, any> = {};
 
-  if (search) {
-    const pattern = new RegExp(escapeRegex(search), "i");
-    filter.$or = [{ name: pattern }, { email: pattern }, { hospital: pattern }, { specialization: pattern }];
-  }
+  // Search: প্রতিটা শব্দ নাম/email/hospital/specialization-এর কোনো শব্দের শুরুর সাথে মিলতে হবে (index ব্যবহার করে)
+  const searchConditions = buildSearchConditions(search);
+  if (searchConditions.length > 0) filter.$and = searchConditions;
   if (specialization) filter.specialization = specialization;
   if (hospital) filter.hospital = hospital;
 
@@ -87,16 +87,22 @@ export const getDoctor = asyncHandler(async (req, res) => {
 });
 
 export const createDoctor = asyncHandler(async (req, res) => {
-  const doctor = await Doctor.create(req.body as DoctorInput);
-  res.status(201).json({ success: true, data: doctor });
+  const input = req.body as DoctorInput;
+  const doctor = await Doctor.create({ ...input, searchTokens: buildDoctorSearchTokens(input) });
+  // searchTokens শুধু ভেতরের কাজে লাগে, উত্তরে পাঠানো হয় না
+  const { searchTokens: _searchTokens, ...data } = doctor.toObject();
+  res.status(201).json({ success: true, data });
 });
 
 export const updateDoctor = asyncHandler(async (req, res) => {
   assertObjectId(req.params.id);
-  const doctor = await Doctor.findByIdAndUpdate(req.params.id, req.body as DoctorInput, {
-    new: true,
-    runValidators: true,
-  }).lean();
+  const input = req.body as DoctorInput;
+  // তথ্য বদলালে search-তালিকাও নতুন করে বানাতে হয়, নইলে পুরোনো নামে খোঁজা যাবে
+  const doctor = await Doctor.findByIdAndUpdate(
+    req.params.id,
+    { ...input, searchTokens: buildDoctorSearchTokens(input) },
+    { new: true, runValidators: true }
+  ).lean();
   if (!doctor) throw new ApiError(404, "Doctor not found");
   res.json({ success: true, data: doctor });
 });
