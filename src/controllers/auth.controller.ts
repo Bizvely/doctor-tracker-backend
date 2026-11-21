@@ -1,4 +1,5 @@
 import bcrypt from "bcryptjs";
+import { env } from "../config/env";
 import { User } from "../models/User";
 import type { ChangePasswordInput, LoginInput } from "../validators/auth.validator";
 import { ApiError } from "../utils/ApiError";
@@ -45,6 +46,11 @@ export const changePassword = asyncHandler(async (req, res) => {
 
   if (!req.user) {
     throw new ApiError(401, "Authentication required");
+  }
+
+  // Demo account-এর password বদলানো বন্ধ (interviewer যেন নিজেও আটকে না যায়, আপনাকেও না আটকায়)
+  if (env.DEMO_USER_EMAIL && req.user.email === env.DEMO_USER_EMAIL) {
+    throw new ApiError(403, "Password cannot be changed for the demo account.");
   }
 
   const user = await User.findById(req.user.id).select("+passwordHash");
