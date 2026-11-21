@@ -2,7 +2,7 @@ import mongoose from "mongoose";
 import { app } from "./app";
 import { connectDB } from "./config/db";
 import { env } from "./config/env";
-import { backfillDoctorSearchTokens } from "./utils/backfillSearchTokens";
+import { backfillDoctorSearchTokens, backfillPatientSearchTokens } from "./utils/backfillSearchTokens";
 import { seedAdmin } from "./utils/seedAdmin";
 
 async function start(): Promise<void> {
@@ -10,9 +10,10 @@ async function start(): Promise<void> {
     await connectDB();
     await seedAdmin();
 
-    // পুরোনো ডাক্তারদের search তালিকা ভরা। এটা ব্যর্থ হলেও server চালু হবে (শুধু পুরোনো data খোঁজায় আসবে না)
+    // পুরোনো ডাক্তার ও রোগীদের search তালিকা ভরা। এটা ব্যর্থ হলেও server চালু হবে (শুধু পুরোনো data খোঁজায় আসবে না)
     try {
       await backfillDoctorSearchTokens();
+      await backfillPatientSearchTokens();
     } catch (error) {
       console.error("⚠️ Search তালিকা ভরা যায়নি:", error instanceof Error ? error.message : error);
     }
