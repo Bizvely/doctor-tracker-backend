@@ -8,6 +8,8 @@ const doctorSchema = new Schema(
     phone: { type: String, required: true, trim: true, maxlength: 20 },
     // unique: true মানে একই email দুইবার থাকতে পারবে না (index নিজে তৈরি হয়)
     email: { type: String, required: true, unique: true, lowercase: true, trim: true, maxlength: 120 },
+    // খোঁজার শব্দ-তালিকা (শুধু search দ্রুত করতে; select: false মানে API-র উত্তরে আসে না)
+    searchTokens: { type: [String], select: false },
   },
   { timestamps: true, versionKey: false }
 );
@@ -17,5 +19,7 @@ doctorSchema.index({ name: 1 });
 doctorSchema.index({ specialization: 1, createdAt: -1 });
 doctorSchema.index({ hospital: 1, createdAt: -1 });
 doctorSchema.index({ createdAt: -1 });
+// Search-এর index: শব্দের শুরু দিয়ে খুঁজলে database পুরো তালিকা না ঘেঁটে সরাসরি পায়
+doctorSchema.index({ searchTokens: 1 });
 
 export const Doctor = model("Doctor", doctorSchema);
